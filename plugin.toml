@@ -1,0 +1,31 @@
+# pyannote-rs as a dependency-isolated Rust cdylib (Path 3 —
+# hand-rolled `AsyncStreamingNode` via `remotemedia-plugin-sdk`).
+#
+# Why hand-rolled: upstream `pyannote-rs` 0.3.x only builds against
+# `ort = 2.0.0-rc.10`, but the SDK host pins `ort = 2.0.0-rc.12`. The
+# `#[node]` dual-emit path (Path 2) would force a workspace-wide
+# unification onto rc.12 and break the build. This plugin sits in its
+# own workspace, depends ONLY on the skinny `remotemedia-plugin-sdk`
+# surface (NOT `remotemedia-core`), and pins ort=rc.10 itself.
+#
+# A consumer references this from a manifest as either:
+#
+#   "plugins": ["pyannote-rs@v0.1.0"]
+#       (canonical-org shorthand → github.com/RemoteMedia-SDK/pyannote-rs)
+#
+#   "plugins": ["./plugins/libpyannote_conflict_plugin.so"]
+#       (local path — for development before the release flow exists)
+#
+# The resolver fetches this file from raw.githubusercontent.com first
+# (cheap, validates the spec + lists node types), then falls through to
+# `release-manifest.json` for the actual platform-specific binary.
+
+[plugin]
+name        = "pyannote-rs"
+version     = "0.1.0"
+language    = "rust"
+description = "pyannote.audio segmenter + embedding (pyannote-rs / ONNX) — Rust cdylib plugin, dependency-isolated to ort=rc.10"
+
+[rust]
+node_types    = ["PyannoteEmbedding", "PyannoteSegmenter"]
+asset_pattern = "lib{name}-{arch}-{os}.{ext}"

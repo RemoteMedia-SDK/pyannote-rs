@@ -1,0 +1,71 @@
+[package]
+name = "pyannote-conflict-plugin"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "pyannote_conflict_plugin"
+crate-type = ["cdylib"]
+
+# Plugin is its own workspace root — fully decoupled from both the
+# main `remotemedia-sdk` workspace AND the host crate. That's what
+# lets it pin its own `ort` version without any cross-workspace
+# unification pulling it back to the host's rc.12.
+[workspace]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+debug = 0
+
+[profile.dev]
+opt-level = 1
+debug = 1
+incremental = true
+
+# This plugin's whole job is to demonstrate dependency isolation:
+#
+#  * It pulls upstream `pyannote-rs` from crates.io (NOT the
+#    `matbeedotcom/pyannote-rs#ort-rc12` fork the main workspace
+#    needs to satisfy `ort = "=2.0.0-rc.12"`).
+#  * It pins `ort = "=2.0.0-rc.10"` — the only release whose
+#    `ndarray` feature still uses `ndarray 0.16` (matching pyannote's
+#    pin). rc.11 jumped to `ndarray 0.17`, and rc.12 additionally
+#    made operator types `!Sync`, which breaks pyannote's
+#    `eyre`-based error wrapping. The host's workspace stays on
+#    `=2.0.0-rc.12` and never knows.
+#  * It does NOT depend on `remotemedia-core`. If it did, cargo's
+#    workspace-dependency mechanism would force the plugin's tree
+#    onto rc.12 and the build would fail in the same way the
+#    workspace would if it tried to use upstream pyannote directly.
+#  * Instead it uses `remotemedia-plugin-sdk`, which re-exports the
+#    skinny `remotemedia-types`/`remotemedia-traits` surfaces
+#    plus the `StreamingNodeFfiAdapter` and `plugin_export!()` macro.
+#    The hand-rolled `WireIn`/`WireOut` mirror is gone — the adapter
+#    encodes/decodes `RuntimeData` for us.
+#
+# The host links `remotemedia-core` (and therefore ort=rc.12) and
+# never sees any of the above. Only `abi_stable::std_types::*` and
+# `async_ffi::FfiFuture` cross the dlopen boundary.
+[dependencies]
+remotemedia-plugin-sdk = { git = "https://github.com/matbeedotcom/remotemedia-sdk.git", rev = "a1f365e40a598645655cb5269b09c60096a24f43" }
+# `abi_stable` must be in the plugin's direct dep set so the attribute
+# macros expanded by `plugin_export!()` (`#[sabi_extern_fn]`,
+# `#[export_root_module]`) can resolve `::abi_stable` at the crate
+# root. This is purely an attribute-macro hygiene requirement; we
+# never reference `abi_stable` types in our own code — those flow in
+# via `remotemedia_plugin_sdk::abi_stable::*` re-exports.
+abi_stable = "0.11"
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Upstream pyannote-rs from crates.io. NOT the matbeedotcom fork.
+pyannote-rs = "0.3"
+
+# Force the plugin's tree onto the only `ort` release where the
+# `ndarray` feature still aligns with pyannote's `ndarray 0.16`
+# requirement. Cargo unifies pyannote's `^2.0.0-rc.10` with this pin.
+# We have to opt into `download-binaries` ourselves because we no
+# longer get the workspace's feature set for free.
+ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std", "ndarray", "download-binaries"] }
