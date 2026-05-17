@@ -22,7 +22,7 @@
 
 [plugin]
 name        = "pyannote-rs"
-version     = "0.1.0"
+version     = "0.2.0"
 language    = "rust"
 description = "pyannote.audio segmenter + embedding (pyannote-rs / ONNX) — Rust cdylib plugin, dependency-isolated to ort=rc.10"
 
